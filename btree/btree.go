@@ -64,14 +64,25 @@ func (tree *BTree) Insert(key []byte, val []byte) error {
 }
 
 func (tree *BTree) Delete(key []byte) (bool, error) {
+	utils.Assert(len(key) != 0, "Empty Key")
+	utils.Assert(len(key) <= BTREE_MAX_KEY_SIZE, "Key Length Out of Bounds")
+
 	if tree.root == 0 {
-		// return false, error
+		return false, errors.New("Tree Does Not Exist")
 	}
 
 	updated := TreeDelete(tree, tree.get(tree.root), key)
 	if len(updated.data) == 0 {
-		
+		return false, errors.New("Key Not Found")
 	}
+
+	tree.del(tree.root)
+	if updated.bType() == BNODE_NODE && updated.nKeys() == 1 {
+		tree.root = updated.getPtr(0)
+	} else {
+		tree.root = tree.new(updated)
+	}
+	return true, nil
 
 }
 
@@ -140,17 +151,19 @@ func NodeDelete(tree *BTree, node BNode, idx uint16, key []byte) BNode {
 	new := BNode{data: make([]byte, BTREE_PAGE_SIZE)}
 	switch {
 	case mergeDir == -1:
-		nodeMerge(new, sibling, updated)
+		merged := BNode{data: make([]byte, BTREE_PAGE_SIZE)}
+		nodeMerge(merged, sibling, updated)
 		tree.del(node.getPtr(idx - 1))
-		// nodereplace2kid
+		NodeReplace2Kid(new, node, idx-1, tree.new(merged), merged.getKey(0))
 	case mergeDir == 1:
-		nodeMerge(new, updated, sibling)
+		merged := BNode{data: make([]byte, BTREE_PAGE_SIZE)}
+		nodeMerge(merged, updated, sibling)
 		tree.del(node.getPtr(idx + 1))
-		// nodereplace2kid
+		NodeReplace2Kid(new, node, idx, tree.new(merged), merged.getKey(0))
 	case mergeDir == 0 && updated.nKeys() == 0:
 		utils.Assert(node.nKeys() == 1 && idx == 0, "Bad")
 		node.setHeader(node.bType(), 0)
-	case mergeDir == 0 && updated.nKeys() > 1:
+	case mergeDir == 0 && updated.nKeys() > 0:
 		NodeReplaceKidN(tree, new, node, idx, updated)
 	}
 
@@ -162,19 +175,19 @@ func shouldMerge(tree *BTree, node BNode, idx uint16, updated BNode) (int, BNode
 		return 0, BNode{} // No Merging
 	}
 
-	if idx > 0 {
+	if idx > 0 { // Left Sibling Exists
 		sibling := tree.get(node.getPtr(idx - 1))
 		merged := sibling.nBytes() + updated.nBytes() - HEADER
 		if merged <= BTREE_PAGE_SIZE {
 			return -1, sibling
 		}
 	}
-	if idx+1 < node.nKeys() {
+	if idx+1 < node.nKeys() { // Right Sibling Exists
 		sibling := tree.get(node.getPtr(idx + 1))
 		merged := sibling.nBytes() + updated.nBytes() - HEADER
 		if merged <= BTREE_PAGE_SIZE {
 			return 1, sibling
 		}
 	}
-	return 0, BNode{}
+	return 0, BNode{} // No Merging Possible
 }

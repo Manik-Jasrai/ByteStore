@@ -1,6 +1,9 @@
 package btree
 
 import (
+	"bytes"
+	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -30,7 +33,7 @@ func TestBNode(t *testing.T) {
 	node := createBNode()
 
 	// Check Header
-	assert.Equal(t, BNODE_LEAF, int(node.bType()))
+	assert.Equal(t, BNODE_LEAF, node.bType())
 	assert.Equal(t, uint16(2), node.nKeys())
 
 	// Check Pointers
@@ -159,6 +162,56 @@ func TestLeafDelete(t *testing.T) {
 	}
 }
 
-func TestMergeNode(t *testing.T) {
+func TestNodeMerge(t *testing.T) {
+	// Create left node
+	left := BNode{data: make([]byte, BTREE_PAGE_SIZE)}
+	left.setHeader(BNODE_LEAF, 1)
+	nodeAppendKV(left, 0, 0, []byte("k1"), []byte("hi"))
 
+	// Create right node
+	right := BNode{data: make([]byte, BTREE_PAGE_SIZE)}
+	right.setHeader(BNODE_LEAF, 1)
+	nodeAppendKV(right, 0, 0, []byte("k4"), []byte("foo"))
+
+	// Create new node to hold merge result
+	merged := BNode{data: make([]byte, BTREE_PAGE_SIZE)}
+
+	// Perform merge
+	nodeMerge(merged, left, right)
+
+	// Assert header
+	assert.Equal(t, uint16(BNODE_LEAF), merged.bType(), "bType should be BNODE_LEAF")
+	assert.Equal(t, uint16(2), merged.nKeys(), "merged node should have 2 keys")
+
+	// Expected key-value pairs after merge
+	expected := []struct {
+		key   []byte
+		value []byte
+	}{
+		{[]byte("k1"), []byte("hi")},
+		{[]byte("k4"), []byte("foo")},
+	}
+
+	for i, kv := range expected {
+		gotKey := merged.getKey(uint16(i))
+		gotValue := merged.getValue(uint16(i))
+
+		assert.True(t, bytes.Equal(kv.key, gotKey), "Key %d should be %s, got %s", i, kv.key, gotKey)
+		assert.True(t, bytes.Equal(kv.value, gotValue), "Value %d should be %s, got %s", i, kv.value, gotValue)
+	}
+}
+
+func TestNodeReplace2Kid(t *testing.T) {
+	node := BNode{data: make([]byte, BTREE_PAGE_SIZE)}
+	node.setHeader(BNODE_LEAF, 5)
+	for i := 0; i < int(node.nKeys()); i++ {
+		k := fmt.Sprintf("k%02d", i)
+		v := strings.Repeat("v", 150)
+		nodeAppendKV(node, uint16(i), 0, []byte(k), []byte(v))
+	}
+	new := BNode{data: make([]byte, BTREE_PAGE_SIZE)}
+	NodeReplace2Kid(new, node, 2, 999, []byte("k02"))
+
+	assert.Equal(t, uint16(4), new.nKeys())
+	assert.Equal(t, uint16(3), new.lookUp([]byte("k04")))
 }

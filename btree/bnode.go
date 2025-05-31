@@ -8,8 +8,8 @@ import (
 )
 
 const (
-	BNODE_NODE = 1
-	BNODE_LEAF = 2
+	BNODE_NODE = uint16(1)
+	BNODE_LEAF = uint16(2)
 )
 
 type BNode struct {
@@ -130,8 +130,8 @@ func leafDelete(new BNode, old BNode, idx uint16) {
 func nodeAppendRange(new BNode, old BNode,
 	dstNew uint16, srcOld uint16, n uint16,
 ) {
-	utils.Assert(srcOld+n <= old.nKeys(), "Out of Range Append : nodeAppendRange")
-	utils.Assert(dstNew+n <= new.nKeys(), "Out of Range Append : nodeAppendRange")
+	utils.Assert(srcOld+n <= old.nKeys(), "Out of Range Append : nodeAppendRange 1")
+	utils.Assert(dstNew+n <= new.nKeys(), "Out of Range Append : nodeAppendRange 2")
 	if n == 0 {
 		return
 	}
@@ -165,6 +165,7 @@ func nodeAppendKV(new BNode, idx uint16, ptr uint64, key []byte, val []byte) {
 	new.setOffset(idx+1, new.getOffset(idx)+4+uint16(len(key)+len(val)))
 }
 
+// This Function Helps to update the kids of a node
 func NodeReplaceKidN(tree *BTree, new BNode, old BNode, idx uint16, kids ...BNode) {
 	inc := uint16(len(kids))
 	new.setHeader(old.bType(), old.nKeys()-1+inc) // we split 1 into inc(new split)
@@ -176,12 +177,15 @@ func NodeReplaceKidN(tree *BTree, new BNode, old BNode, idx uint16, kids ...BNod
 }
 
 // Replace 2 adjacent links with 1
-func NodeReplace2Kid(tree *BTree, new BNode, old BNode, idx uint16, key []byte) {
-
+func NodeReplace2Kid(new BNode, old BNode, idx uint16, ptr uint64, key []byte) {
+	new.setHeader(old.bType(), old.nKeys()-1)
+	nodeAppendRange(new, old, 0, 0, idx)
+	nodeAppendKV(new, idx, ptr, key, old.getValue(idx))
+	nodeAppendRange(new, old, idx+1, idx+2, old.nKeys()-(idx+2))
 }
 
 func nodeMerge(new BNode, left BNode, right BNode) {
 	new.setHeader(left.bType(), left.nKeys()+right.nKeys())
 	nodeAppendRange(new, left, 0, 0, left.nKeys())
-	nodeAppendRange(new, right, new.nKeys(), 0, right.nKeys())
+	nodeAppendRange(new, right, left.nKeys(), 0, right.nKeys())
 }
