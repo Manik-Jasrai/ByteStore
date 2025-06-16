@@ -18,14 +18,14 @@ func newC() *C {
 
 	return &C{
 		tree: BTree{
-			get: func(ptr uint64) BNode {
+			get: func(ptr uint64) []byte {
 				node, ok := pages[ptr]
 				utils.Assert(ok, "Node Exists")
 				return node
 			},
-			new: func(node BNode) uint64 {
-				utils.Assert(node.nBytes() <= BTREE_PAGE_SIZE, "Out of Bounds")
-				key := uint64(uintptr(unsafe.Pointer(&node.data[0])))
+			new: func(node []byte) uint64 {
+				utils.Assert(BNode(node).nBytes() <= BTREE_PAGE_SIZE, "Out of Bounds")
+				key := uint64(uintptr(unsafe.Pointer(&node[0])))
 				pages[key] = node
 				return key
 			},

@@ -14,7 +14,7 @@ func TestInsertSingleKey(t *testing.T) {
 	c.add("k1", "hello")
 
 	tree := c.tree
-	root := tree.get(tree.root)
+	root := BNode(tree.get(tree.root))
 
 	// Root should be a leaf with 2 keys (sentinel + actual key)
 	assert.Equal(t, BNODE_LEAF, root.bType())
@@ -34,7 +34,7 @@ func TestInsertDuplicateUpdatesValue(t *testing.T) {
 	c.add("k1", "val1")
 	c.add("k1", "val2")
 
-	root := c.tree.get(c.tree.root)
+	root := BNode(c.tree.get(c.tree.root))
 	assert.Equal(t, []byte("val2"), root.getValue(1))
 }
 
@@ -45,7 +45,7 @@ func TestInsertMultipleOrdered(t *testing.T) {
 		c.add(k, "val"+k[1:])
 	}
 
-	root := c.tree.get(c.tree.root)
+	root := BNode(c.tree.get(c.tree.root))
 	assert.Equal(t, uint16(4), root.nKeys()) // 3 + sentinel
 
 	assert.Equal(t, []byte("k1"), root.getKey(1))
@@ -65,7 +65,7 @@ func TestInsertSplitAndPromote(t *testing.T) {
 		assert.NoError(t, err)
 	}
 
-	root := c.tree.get(c.tree.root)
+	root := BNode(c.tree.get(c.tree.root))
 	assert.Equal(t, BNODE_NODE, root.bType())
 	assert.Greater(t, root.nKeys(), uint16(1)) // Should have >1 child
 
@@ -93,7 +93,7 @@ func TestDeleteExistingKey(t *testing.T) {
 	assert.True(t, ok)
 	assert.NoError(t, err)
 
-	root := c.tree.get(c.tree.root)
+	root := BNode(c.tree.get(c.tree.root))
 	assert.Equal(t, uint16(2), root.nKeys()) // Sentinel + 1 key
 	assert.Equal(t, []byte("k2"), root.getKey(1))
 }
@@ -112,15 +112,15 @@ func TestDeleteLowerLevel(t *testing.T) {
 	assert.True(t, ok)
 	assert.NoError(t, err)
 
-	root := c.tree.get(c.tree.root)
-	node := c.tree.get(root.getPtr(0))
+	root := BNode(c.tree.get(c.tree.root))
+	node := BNode(c.tree.get(root.getPtr(0)))
 
 	assert.NotEqual(t, []byte("k01"), node.getKey(1))
 }
 
 func TestShouldMerge(t *testing.T) {
 	makeLeaf := func(kvCount int, valSize int) BNode {
-		n := BNode{data: make([]byte, BTREE_PAGE_SIZE)}
+		n := BNode(make([]byte, BTREE_PAGE_SIZE))
 		n.setHeader(BNODE_LEAF, uint16(kvCount+1)) // +1 for sentinel
 		nodeAppendKV(n, 0, 0, nil, nil)
 		for i := 1; i <= kvCount; i++ {
@@ -136,7 +136,7 @@ func TestShouldMerge(t *testing.T) {
 	updatedSmall := makeLeaf(1, 50)   // Small enough to merge
 	updatedLarge := makeLeaf(10, 200) // Too big to merge
 
-	node := BNode{data: make([]byte, BTREE_PAGE_SIZE)}
+	node := BNode(make([]byte, BTREE_PAGE_SIZE))
 	node.setHeader(BNODE_NODE, 3)
 	nodeAppendKV(node, 0, 101, []byte("a"), nil)
 	nodeAppendKV(node, 1, 102, []byte("b"), nil)
@@ -150,10 +150,10 @@ func TestShouldMerge(t *testing.T) {
 	}
 
 	tree := &BTree{
-		get: func(ptr uint64) BNode {
+		get: func(ptr uint64) []byte {
 			return fakeMap[ptr]
 		},
-		new: func(n BNode) uint64 { return 999 },
+		new: func(n []byte) uint64 { return 999 },
 		del: func(ptr uint64) {},
 	}
 	// t.Run("MergeWithLeftSibling", func(t *testing.T) {
@@ -165,7 +165,7 @@ func TestShouldMerge(t *testing.T) {
 	t.Run("NoMergeDueToLargeUpdated", func(t *testing.T) {
 		dir, sib := shouldMerge(tree, node, 1, updatedLarge)
 		assert.Equal(t, 0, dir)
-		assert.Equal(t, 0, len(sib.data))
+		assert.Equal(t, 0, len(sib))
 	})
 
 	t.Run("NoMergeIfSiblingsTooBig", func(t *testing.T) {
@@ -189,7 +189,7 @@ func TestShouldMerge(t *testing.T) {
 
 		dir, sib := shouldMerge(tree, node, 0, updatedSmall)
 		assert.Equal(t, 1, dir)
-		assert.Equal(t, siblingRight.data, sib.data)
+		assert.Equal(t, siblingRight, sib)
 	})
 }
 
@@ -203,7 +203,7 @@ func TestDeleteTriggersMerge(t *testing.T) {
 		c.add(k, v)
 	}
 	// Test for Splitting
-	root := c.tree.get(c.tree.root)
+	root := BNode(c.tree.get(c.tree.root))
 	assert.Equal(t, BNODE_NODE, root.bType())
 	assert.Greater(t, root.nKeys(), uint16(1)) // Should have >1 child
 
@@ -216,7 +216,7 @@ func TestDeleteTriggersMerge(t *testing.T) {
 	}
 
 	// Only one key should remain
-	newRoot := c.tree.get(c.tree.root)
+	newRoot := BNode(c.tree.get(c.tree.root))
 	assert.Equal(t, BNODE_LEAF, newRoot.bType())
 	assert.Equal(t, []byte("k00"), newRoot.getKey(1))
 }

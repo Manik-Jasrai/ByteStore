@@ -15,16 +15,34 @@ const BTREE_MAX_VAL_SIZE = 3000
 type BTree struct {
 	root uint64
 
-	get func(uint64) BNode
-	new func(BNode) uint64
+	get func(uint64) []byte
+	new func([]byte) uint64
 	del func(uint64)
+}
+
+func (t BTree) GetRoot() uint64 {
+	return t.root
+}
+
+func (t BTree) SetRoot(root uint64) {
+	t.root = root
+}
+func (t BTree) SetGet(f func(uint64) []byte) {
+	t.get = f
+}
+func (t BTree) SetDel(f func(uint64)) {
+	t.del = f
+}
+
+func (t BTree) SetNew(f func([]byte) uint64) {
+	t.new = f
 }
 
 func CheckLimit(key []byte, val []byte) error {
 	if len(key) <= BTREE_MAX_KEY_SIZE && len(val) <= BTREE_MAX_VAL_SIZE {
 		return nil
 	}
-	return errors.New("Out of Bound KV")
+	return errors.New("out of bound kV")
 }
 
 func (tree *BTree) Insert(key []byte, val []byte) error {
@@ -34,7 +52,7 @@ func (tree *BTree) Insert(key []byte, val []byte) error {
 	}
 	// No tree exists Create a tree
 	if tree.root == 0 {
-		root := BNode{data: make([]byte, BTREE_PAGE_SIZE)}
+		root := BNode(make([]byte, BTREE_PAGE_SIZE))
 		root.setHeader(BNODE_LEAF, 2)
 		nodeAppendKV(root, 0, 0, nil, nil) // Sentinel value
 		nodeAppendKV(root, 1, 0, key, val)
@@ -48,7 +66,7 @@ func (tree *BTree) Insert(key []byte, val []byte) error {
 	nspilt, split := NodeSplit3(node)
 
 	if nspilt > 1 {
-		root := BNode{data: make([]byte, BTREE_PAGE_SIZE)}
+		root := BNode(make([]byte, BTREE_PAGE_SIZE))
 		// TODO
 		root.setHeader(BNODE_NODE, nspilt)
 		for i, knode := range split[:nspilt] {
@@ -72,7 +90,7 @@ func (tree *BTree) Delete(key []byte) (bool, error) {
 	}
 
 	updated := TreeDelete(tree, tree.get(tree.root), key)
-	if len(updated.data) == 0 {
+	if len(updated) == 0 {
 		return false, errors.New("Key Not Found")
 	}
 
@@ -89,7 +107,7 @@ func (tree *BTree) Delete(key []byte) (bool, error) {
 func TreeInsert(tree *BTree, node BNode, key []byte, val []byte) BNode {
 	// result node
 	// we keep it larger than page size so it result exceeds we will spit in two
-	new := BNode{data: make([]byte, 2*BTREE_PAGE_SIZE)}
+	new := BNode(make([]byte, 2*BTREE_PAGE_SIZE))
 	idx := node.lookUp(key)
 	switch node.bType() {
 	case BNODE_LEAF:
@@ -127,7 +145,7 @@ func TreeDelete(tree *BTree, node BNode, key []byte) BNode {
 			return BNode{} // Not Found
 		}
 
-		new := BNode{data: make([]byte, BTREE_PAGE_SIZE)}
+		new := BNode(make([]byte, BTREE_PAGE_SIZE))
 		leafDelete(new, node, idx)
 		return new
 	case BNODE_NODE:
@@ -141,22 +159,22 @@ func NodeDelete(tree *BTree, node BNode, idx uint16, key []byte) BNode {
 	kptr := node.getPtr(idx)
 
 	updated := TreeDelete(tree, tree.get(kptr), key)
-	if len(updated.data) == 0 {
+	if len(updated) == 0 {
 		return BNode{} // Not Found
 	}
 	tree.del(kptr)
 
 	// should Merge
 	mergeDir, sibling := shouldMerge(tree, node, idx, updated)
-	new := BNode{data: make([]byte, BTREE_PAGE_SIZE)}
+	new := BNode(make([]byte, BTREE_PAGE_SIZE))
 	switch {
 	case mergeDir == -1:
-		merged := BNode{data: make([]byte, BTREE_PAGE_SIZE)}
+		merged := BNode(make([]byte, BTREE_PAGE_SIZE))
 		nodeMerge(merged, sibling, updated)
 		tree.del(node.getPtr(idx - 1))
 		NodeReplace2Kid(new, node, idx-1, tree.new(merged), merged.getKey(0))
 	case mergeDir == 1:
-		merged := BNode{data: make([]byte, BTREE_PAGE_SIZE)}
+		merged := BNode(make([]byte, BTREE_PAGE_SIZE))
 		nodeMerge(merged, updated, sibling)
 		tree.del(node.getPtr(idx + 1))
 		NodeReplace2Kid(new, node, idx, tree.new(merged), merged.getKey(0))
@@ -176,14 +194,14 @@ func shouldMerge(tree *BTree, node BNode, idx uint16, updated BNode) (int, BNode
 	}
 
 	if idx > 0 { // Left Sibling Exists
-		sibling := tree.get(node.getPtr(idx - 1))
+		sibling := BNode(tree.get(node.getPtr(idx - 1)))
 		merged := sibling.nBytes() + updated.nBytes() - HEADER
 		if merged <= BTREE_PAGE_SIZE {
 			return -1, sibling
 		}
 	}
 	if idx+1 < node.nKeys() { // Right Sibling Exists
-		sibling := tree.get(node.getPtr(idx + 1))
+		sibling := BNode(tree.get(node.getPtr(idx + 1)))
 		merged := sibling.nBytes() + updated.nBytes() - HEADER
 		if merged <= BTREE_PAGE_SIZE {
 			return 1, sibling

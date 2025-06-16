@@ -18,8 +18,8 @@ func TestNodeSplit2(t *testing.T) {
 		}
 		old := CreateLeafwithKVs(keys, vals)
 
-		left := BNode{data: make([]byte, BTREE_PAGE_SIZE)}
-		right := BNode{data: make([]byte, BTREE_PAGE_SIZE)}
+		left := BNode(make([]byte, BTREE_PAGE_SIZE))
+		right := BNode(make([]byte, BTREE_PAGE_SIZE))
 
 		NodeSplit2(left, right, old)
 
@@ -50,8 +50,8 @@ func TestNodeSplit2(t *testing.T) {
 		}
 		old := CreateLeafwithKVs(keys, vals)
 
-		left := BNode{data: make([]byte, BTREE_PAGE_SIZE)}
-		right := BNode{data: make([]byte, BTREE_PAGE_SIZE)}
+		left := BNode(make([]byte, BTREE_PAGE_SIZE))
+		right := BNode(make([]byte, BTREE_PAGE_SIZE))
 
 		NodeSplit2(left, right, old)
 

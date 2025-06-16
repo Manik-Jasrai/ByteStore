@@ -34,20 +34,20 @@ func NodeSplit2(left BNode, right BNode, old BNode) {
 
 func NodeSplit3(old BNode) (uint16, [3]BNode) {
 	if old.nBytes() <= BTREE_PAGE_SIZE {
-		old.data = old.data[:BTREE_PAGE_SIZE]
+		old = old[:BTREE_PAGE_SIZE]
 		return 1, [3]BNode{old} // not split
 	}
 
-	left := BNode{data: make([]byte, 2*BTREE_PAGE_SIZE)}
-	right := BNode{data: make([]byte, BTREE_PAGE_SIZE)}
+	left := BNode(make([]byte, 2*BTREE_PAGE_SIZE))
+	right := BNode(make([]byte, BTREE_PAGE_SIZE))
 	NodeSplit2(left, right, old)
 	if left.nBytes() <= BTREE_PAGE_SIZE {
-		left.data = left.data[:BTREE_PAGE_SIZE]
+		left = left[:BTREE_PAGE_SIZE]
 		return 2, [3]BNode{left, right}
 	}
 
-	leftleft := BNode{data: make([]byte, BTREE_PAGE_SIZE)}
-	middle := BNode{data: make([]byte, BTREE_PAGE_SIZE)}
+	leftleft := BNode(make([]byte, BTREE_PAGE_SIZE))
+	middle := BNode(make([]byte, BTREE_PAGE_SIZE))
 	NodeSplit2(leftleft, middle, left)
 	utils.Assert(leftleft.nBytes() <= BTREE_PAGE_SIZE, "Oversized data")
 	return 3, [3]BNode{leftleft, middle, right}

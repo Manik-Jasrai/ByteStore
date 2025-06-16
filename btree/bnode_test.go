@@ -10,7 +10,7 @@ import (
 )
 
 func createBNode() BNode {
-	node := BNode{data: make([]byte, BTREE_PAGE_SIZE)}
+	node := BNode(make([]byte, BTREE_PAGE_SIZE))
 	node.setHeader(BNODE_LEAF, 2)
 	nodeAppendKV(node, 0, 0, []byte("k1"), []byte("hi"))
 	nodeAppendKV(node, 1, 0, []byte("k3"), []byte("hello"))
@@ -18,12 +18,12 @@ func createBNode() BNode {
 }
 
 func CreateLeafwithKVs(keys [][]byte, vals [][]byte) BNode {
-	node := BNode{data: make([]byte, 2*BTREE_PAGE_SIZE)}
+	node := BNode(make([]byte, 2*BTREE_PAGE_SIZE))
 	node.setHeader(BNODE_LEAF, 0)
 	for i := 0; i < len(keys); i++ {
 		key := keys[i]
 		val := vals[i]
-		newNode := BNode{data: make([]byte, 2*BTREE_PAGE_SIZE)}
+		newNode := BNode(make([]byte, 2*BTREE_PAGE_SIZE))
 		leafInsert(newNode, node, uint16(i), key, val)
 		node = newNode
 	}
@@ -101,7 +101,7 @@ func TestLookUp(t *testing.T) {
 
 func TestLeafInsert(t *testing.T) {
 	old := createBNode()
-	new := BNode{data: make([]byte, 2*BTREE_PAGE_SIZE)}
+	new := BNode(make([]byte, 2*BTREE_PAGE_SIZE))
 	idx := old.lookUp([]byte("k2"))
 	assert.Equal(t, uint16(0), idx)
 	// Insert "k2" between "k1" and "k3"
@@ -119,7 +119,7 @@ func TestLeafInsert(t *testing.T) {
 }
 func TestLeafUpdate(t *testing.T) {
 	old := createBNode()
-	new := BNode{data: make([]byte, 2*BTREE_PAGE_SIZE)}
+	new := BNode(make([]byte, 2*BTREE_PAGE_SIZE))
 	idx := old.lookUp([]byte("k3"))
 	assert.Equal(t, uint16(1), idx)
 
@@ -136,7 +136,7 @@ func TestLeafUpdate(t *testing.T) {
 func TestLeafDelete(t *testing.T) {
 	old := createBNode()
 
-	new := BNode{data: make([]byte, BTREE_PAGE_SIZE)}
+	new := BNode(make([]byte, BTREE_PAGE_SIZE))
 
 	{
 		idx := old.lookUp([]byte("k3"))
@@ -164,17 +164,17 @@ func TestLeafDelete(t *testing.T) {
 
 func TestNodeMerge(t *testing.T) {
 	// Create left node
-	left := BNode{data: make([]byte, BTREE_PAGE_SIZE)}
+	left := BNode(make([]byte, BTREE_PAGE_SIZE))
 	left.setHeader(BNODE_LEAF, 1)
 	nodeAppendKV(left, 0, 0, []byte("k1"), []byte("hi"))
 
 	// Create right node
-	right := BNode{data: make([]byte, BTREE_PAGE_SIZE)}
+	right := BNode(make([]byte, BTREE_PAGE_SIZE))
 	right.setHeader(BNODE_LEAF, 1)
 	nodeAppendKV(right, 0, 0, []byte("k4"), []byte("foo"))
 
 	// Create new node to hold merge result
-	merged := BNode{data: make([]byte, BTREE_PAGE_SIZE)}
+	merged := BNode(make([]byte, BTREE_PAGE_SIZE))
 
 	// Perform merge
 	nodeMerge(merged, left, right)
@@ -202,14 +202,14 @@ func TestNodeMerge(t *testing.T) {
 }
 
 func TestNodeReplace2Kid(t *testing.T) {
-	node := BNode{data: make([]byte, BTREE_PAGE_SIZE)}
+	node := BNode(make([]byte, BTREE_PAGE_SIZE))
 	node.setHeader(BNODE_LEAF, 5)
 	for i := 0; i < int(node.nKeys()); i++ {
 		k := fmt.Sprintf("k%02d", i)
 		v := strings.Repeat("v", 150)
 		nodeAppendKV(node, uint16(i), 0, []byte(k), []byte(v))
 	}
-	new := BNode{data: make([]byte, BTREE_PAGE_SIZE)}
+	new := BNode(make([]byte, BTREE_PAGE_SIZE))
 	NodeReplace2Kid(new, node, 2, 999, []byte("k02"))
 
 	assert.Equal(t, uint16(4), new.nKeys())

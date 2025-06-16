@@ -12,80 +12,85 @@ const (
 	BNODE_LEAF = uint16(2)
 )
 
-type BNode struct {
-	data []byte
+type BNode []byte
+
+func (node BNode) SetData(data []byte) {
+	node = data
+}
+func (node BNode) GetData() []byte {
+	return node
 }
 
 // Header
-func (node *BNode) bType() uint16 {
-	return binary.LittleEndian.Uint16(node.data[0:2])
+func (node BNode) bType() uint16 {
+	return binary.LittleEndian.Uint16(node[0:2])
 }
-func (node *BNode) nKeys() uint16 {
-	return binary.LittleEndian.Uint16(node.data[2:4])
+func (node BNode) nKeys() uint16 {
+	return binary.LittleEndian.Uint16(node[2:4])
 }
 
-func (node *BNode) setHeader(btype uint16, nkeys uint16) {
-	binary.LittleEndian.PutUint16(node.data[0:2], btype) // uint16 - 2Bytes
-	binary.LittleEndian.PutUint16(node.data[2:4], nkeys)
+func (node BNode) setHeader(btype uint16, nkeys uint16) {
+	binary.LittleEndian.PutUint16(node[0:2], btype) // uint16 - 2Bytes
+	binary.LittleEndian.PutUint16(node[2:4], nkeys)
 }
 
 // Pointers
-func (node *BNode) getPtr(idx uint16) uint64 {
+func (node BNode) getPtr(idx uint16) uint64 {
 	utils.Assert(idx < node.nKeys(), "Index Out of Bounds : GetPtr")
 	pos := HEADER + 8*idx
-	return binary.LittleEndian.Uint64(node.data[pos:]) // uint64 - 8Bytes
+	return binary.LittleEndian.Uint64(node[pos:]) // uint64 - 8Bytes
 }
-func (node *BNode) setPtr(idx uint16, ptr uint64) {
+func (node BNode) setPtr(idx uint16, ptr uint64) {
 	utils.Assert(idx < node.nKeys(), "Index Out of Bounds : SetPtr")
 	pos := HEADER + 8*idx
-	binary.LittleEndian.PutUint64(node.data[pos:], ptr) // uint64 - 8Bytes
+	binary.LittleEndian.PutUint64(node[pos:], ptr) // uint64 - 8Bytes
 }
 
 // Offset - used to locate KV quickly
-func (node *BNode) offsetPos(idx uint16) uint16 {
+func (node BNode) offsetPos(idx uint16) uint16 {
 	utils.Assert(1 <= idx && idx <= node.nKeys(), "Index Out of Bounds : OffsetPos")
 	return HEADER + 8*node.nKeys() + 2*(idx-1)
 }
-func (node *BNode) getOffset(idx uint16) uint16 {
+func (node BNode) getOffset(idx uint16) uint16 {
 	if idx == 0 {
 		return 0
 	}
-	return binary.LittleEndian.Uint16(node.data[node.offsetPos(idx):])
+	return binary.LittleEndian.Uint16(node[node.offsetPos(idx):])
 }
-func (node *BNode) setOffset(idx uint16, offset uint16) {
-	binary.LittleEndian.PutUint16(node.data[node.offsetPos(idx):], offset)
+func (node BNode) setOffset(idx uint16, offset uint16) {
+	binary.LittleEndian.PutUint16(node[node.offsetPos(idx):], offset)
 }
 
 // KV
-func (node *BNode) KVPos(idx uint16) uint16 {
+func (node BNode) KVPos(idx uint16) uint16 {
 	utils.Assert(idx <= node.nKeys(), "Index Out of Bounds : KVPos")
 	return HEADER + 8*node.nKeys() + 2*node.nKeys() + node.getOffset(idx)
 }
-func (node *BNode) getKey(idx uint16) []byte {
+func (node BNode) getKey(idx uint16) []byte {
 	utils.Assert(idx < node.nKeys(), "Index Out of Bounds : GetKey")
 	pos := node.KVPos(idx)
-	klen := binary.LittleEndian.Uint16(node.data[pos:])
-	return (node.data[pos+4:])[:klen]
+	klen := binary.LittleEndian.Uint16(node[pos:])
+	return (node[pos+4:])[:klen]
 	// 1. first create a slice from pos + 4 to end
 	// 2. then it selects the first klen from it
 	// 3. helps preven out of bound panics
 }
-func (node *BNode) getValue(idx uint16) []byte {
+func (node BNode) getValue(idx uint16) []byte {
 	utils.Assert(idx < node.nKeys(), "Index Out of Bounds : GetValue")
 	pos := node.KVPos(idx)
-	klen := binary.LittleEndian.Uint16(node.data[pos:])
-	vlen := binary.LittleEndian.Uint16(node.data[pos+2:])
-	return (node.data[pos+klen+4:])[:vlen]
+	klen := binary.LittleEndian.Uint16(node[pos:])
+	vlen := binary.LittleEndian.Uint16(node[pos+2:])
+	return (node[pos+klen+4:])[:vlen]
 }
 
 // Size of Node
-func (node *BNode) nBytes() uint16 {
+func (node BNode) nBytes() uint16 {
 	return node.KVPos(node.nKeys())
 }
 
 // Search a key
 // or a pos where this key could be put
-func (node *BNode) lookUp(key []byte) uint16 {
+func (node BNode) lookUp(key []byte) uint16 {
 	found := uint16(0)
 	for i := uint16(1); i < node.nKeys(); i++ {
 		// since keys are sorted
@@ -149,7 +154,7 @@ func nodeAppendRange(new BNode, old BNode,
 	// KVs
 	begin := old.KVPos(srcOld)
 	end := old.KVPos(srcOld + n)
-	copy(new.data[new.KVPos(dstNew):], old.data[begin:end])
+	copy(new[new.KVPos(dstNew):], old[begin:end])
 }
 
 func nodeAppendKV(new BNode, idx uint16, ptr uint64, key []byte, val []byte) {
@@ -157,10 +162,10 @@ func nodeAppendKV(new BNode, idx uint16, ptr uint64, key []byte, val []byte) {
 	new.setPtr(idx, ptr)
 	// KV
 	pos := new.KVPos(idx)
-	binary.LittleEndian.PutUint16(new.data[pos:], uint16(len(key)))
-	binary.LittleEndian.PutUint16(new.data[pos+2:], uint16(len(val)))
-	copy(new.data[pos+4:], key)
-	copy(new.data[pos+4+uint16(len(key)):], val)
+	binary.LittleEndian.PutUint16(new[pos:], uint16(len(key)))
+	binary.LittleEndian.PutUint16(new[pos+2:], uint16(len(val)))
+	copy(new[pos+4:], key)
+	copy(new[pos+4+uint16(len(key)):], val)
 	// Offset for next key
 	new.setOffset(idx+1, new.getOffset(idx)+4+uint16(len(key)+len(val)))
 }
