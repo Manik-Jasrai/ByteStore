@@ -20,13 +20,15 @@ type KV struct {
 	}
 
 	page struct {
-		flushed uint64
+		flushed uint64            // database size in number of pages
+		nappend uint64            // number of pages to be appended
+		updates map[uint64][]byte // pending updates
 		temp    [][]byte
 	}
 
 	free FreeList
 
-	failed bool
+	// failed bool
 }
 
 func (db *KV) Open() error {
@@ -38,18 +40,25 @@ func (db *KV) Open() error {
 	// Storing the fd in our struct
 	db.fd = fd
 
-	// initialize mmap
+	db.page.updates = map[uint64][]byte{}
+
+	// initialize mmap TODO
+	fileSize, chunk, err := mmapInit(db)
+	if err != nil {
+		goto fail
+	}
+	db.mmap.total = len(chunk)
+	db.mmap.chunks = [][]byte{chunk}
 
 	// Map the tree functions to implemented
 	db.tree.SetGet(db.pageRead)
-	// db.tree.SetNew(db.pageAlloc)
-	db.tree.SetDel(db.free.PushTail)
+	db.tree.SetNew(db.pageAlloc)
+	db.tree.SetDel(db.pageDel)
 	// Free list callbacks
 	db.free.get = db.pageRead
 	db.free.new = db.pageAppend
-	// db.free.del = db.pageWrite
+	db.free.set = db.pageWrite
 
-	fileSize := db.mmap.total * btree.BTREE_PAGE_SIZE
 	err = readMeta(db, int64(fileSize))
 	if err != nil {
 		goto fail
@@ -58,28 +67,68 @@ func (db *KV) Open() error {
 
 fail:
 	db.Close()
-	return fmt.Errorf("KV Open %w:", err)
+	return fmt.Errorf("KV Open %w : ", err)
 }
 
 func (db *KV) Close() {
 	for _, chunk := range db.mmap.chunks {
 		if err := syscall.Munmap(chunk); err != nil {
-			fmt.Errorf("KV Close %w:", err)
 			return
 		}
 	}
-
 	syscall.Close(db.fd)
 }
 
-func (db *KV) Set(key []byte, val []byte) error {
-	meta := db.getMeta()
-	db.tree.Insert(key, val)
-	return updateOrRevert(db, meta)
+// TODO
+func (db *KV) Get(key []byte) ([]byte, error) {
+	if len(key) == 0 {
+		return nil, fmt.Errorf("empty key")
+	}
+
+	val := db.tree.Get(key)
+	if val == nil {
+		return nil, fmt.Errorf("key not found")
+	}
+
+	return val, nil
+}
+func (db *KV) Del(key []byte) error {
+	if len(key) == 0 {
+		return fmt.Errorf("empty key")
+	}
+
+	// meta := db.getMeta()
+
+	// Check if key exists
+	if db.tree.Get(key) == nil {
+		return fmt.Errorf("key not found")
+	}
+
+	// Delete from tree
+	db.tree.Delete(key)
+
+	return updateFile(db)
 }
 
-// Btree.get
+func (db *KV) Set(key []byte, val []byte) error {
+	if len(key) == 0 {
+		return fmt.Errorf("empty key")
+	}
+	// meta := db.getMeta()
+	db.tree.Insert(key, val)
+	return updateFile(db)
+}
+
+// Btree.get, read a page
 func (db *KV) pageRead(ptr uint64) []byte {
+	if node, ok := db.page.updates[ptr]; ok {
+		return node
+	}
+
+	return db.pageReadFile(ptr)
+}
+
+func (db *KV) pageReadFile(ptr uint64) []byte {
 	start := uint64(0)
 	// 'start' tells us the starting page number of the chunk
 	for _, chunk := range db.mmap.chunks {
@@ -88,9 +137,8 @@ func (db *KV) pageRead(ptr uint64) []byte {
 		if ptr < end {
 			// Our page is present in the chunk
 			offset := btree.BTREE_PAGE_SIZE * (ptr - start) // position of our page
-			node := btree.BNode{}
-			node.SetData(chunk[offset : offset+btree.BTREE_PAGE_SIZE])
-			return node
+
+			return chunk[offset : offset+btree.BTREE_PAGE_SIZE]
 		}
 		start = end
 	}
@@ -102,6 +150,38 @@ func (db *KV) pageAppend(node []byte) uint64 {
 	db.page.temp = append(db.page.temp, node)
 
 	return ptr
+}
+
+// Btree.new , allocate a new page
+func (db *KV) pageAlloc(node []byte) uint64 {
+	// we check the free list first for an empty page
+	if ptr := db.free.PopHead(); ptr != 0 {
+		db.page.updates[ptr] = node
+		return ptr
+	}
+
+	return db.pageAppend(node)
+}
+
+// Btree.del
+func (db *KV) pageDel(ptr uint64) {
+
+	delete(db.page.updates, ptr)
+	db.free.PushTail(ptr)
+
+	return
+}
+
+// FreeList.set, updates an existing page
+func (db *KV) pageWrite(ptr uint64) []byte {
+	if node, ok := db.page.updates[ptr]; ok {
+		return node
+	}
+	node := make([]byte, btree.BTREE_PAGE_SIZE)
+	copy(node, db.pageReadFile(ptr))
+
+	db.page.updates[ptr] = node
+	return node
 }
 
 func (db *KV) getMeta() []byte {

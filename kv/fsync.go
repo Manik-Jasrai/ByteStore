@@ -67,21 +67,23 @@ func updateFile(db *KV) error {
 		return fmt.Errorf("loading meta %w: ", err)
 	}
 	// 4. fsync
-	return syscall.Fsync(db.fd)
-}
-
-// TODO : Second version
-func updateOrRevert(db *KV, meta []byte) error {
-	// if db.failed {
-	// 	db.failed = false
-	// }
-	// 2 phase update
-	// revert to previous root
-	if err := updateFile(db); err != nil {
-		// db.failed = true
-		db.setMeta(meta)
-		// discard temporaries
-		db.page.temp = db.page.temp[:0]
+	if err := syscall.Fsync(db.fd); err != nil {
+		return err
 	}
+
+	db.free.SetMaxSeq()
 	return nil
 }
+
+// func updateOrRevert(db *KV, meta []byte) error {
+
+// 	// 2 phase update
+// 	// revert to previous root
+// 	if err := updateFile(db); err != nil {
+// 		db.setMeta(meta)
+// 		// discard temporaries
+// 		db.page.temp = db.page.temp[:0]
+// 		return err
+// 	}
+// 	return nil
+// }

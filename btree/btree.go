@@ -45,6 +45,10 @@ func CheckLimit(key []byte, val []byte) error {
 	return errors.New("out of bound kV")
 }
 
+// TODO
+func (tree *BTree) Get(key []byte) []byte {
+	return nil
+}
 func (tree *BTree) Insert(key []byte, val []byte) error {
 	// Check for limit of KV
 	if err := CheckLimit(key, val); err != nil {

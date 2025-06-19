@@ -12,10 +12,19 @@ import (
 
 const DB_SIG = "0123456789ABCDEF"
 
+// New Meta Page
+/*
+| sig | root_ptr | page_used | head_page | head_seq | tail_page | tail_seq |
+| 16B |    8B    |     8B    |     8B    |    8B    |     8B    |    8B    |
+*/
+
 // Reading meta data from storage and putting it to KV data structure
 func readMeta(db *KV, fileSize int64) error {
 	if fileSize == 0 || db.mmap.total == 0 {
-		db.page.flushed = 1
+		db.page.flushed = 2 // reserve 2 pages, 1 meta page and 1 fl node
+		db.free.headPage = 1
+		db.free.tailPage = 1
+
 		return nil
 	}
 
